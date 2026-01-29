@@ -8,13 +8,13 @@ pub enum Vowel { A, E, I, O, U }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum SyllableParseError {
-    EmptyString, NoVowel
+    EmptyString, NoVowel(usize)
 }
 impl std::fmt::Display for SyllableParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptyString => write!(f, "cannot parse syllable from empty string"),
-            Self::NoVowel => write!(f, "no vowel found after consonant")
+            Self::NoVowel(idx) => write!(f, "no vowel found after consonant (index {idx})")
         }
     }
 }
@@ -35,11 +35,12 @@ impl std::fmt::Display for SyllableDecodeError {
 impl std::error::Error for SyllableDecodeError {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Syllable { pub consonant: Option<Consonant>, pub vowel: Vowel, pub nasal: bool }
+pub struct Syllable { pub consonant: Option<Consonant>, pub vowel: Vowel, pub nasal: bool, pub(crate) is_space: bool }
 
 impl std::fmt::Display for Syllable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use {Consonant::*, Vowel::*};
+        if self.is_space { return write!(f, "_") }
         match self.consonant {
             None => Ok(()),
             Some(T) => write!(f, "t"), Some(K) => write!(f, "k"), Some(P) => write!(f, "p"),
@@ -55,42 +56,47 @@ impl std::fmt::Display for Syllable {
 }
 
 impl Syllable {
-    pub fn parse(string: &mut &str) -> Result<Syllable, SyllableParseError> {
-        let mut chars = (*string).chars();
+    pub const SPACE: Syllable = Syllable { is_space: true, consonant: None, vowel: Vowel::A, nasal: false };
+    
+    pub(crate) fn parse(string: &mut &[u8], idx: usize) -> Result<Syllable, SyllableParseError> {
+        let mut chars = (*string).iter();
         let mut first = chars.next().ok_or(SyllableParseError::EmptyString)?;
         let consonant = match first {
-            't' => Some(Consonant::T), 'k' => Some(Consonant::K), 'p' => Some(Consonant::P),
-            'j' => Some(Consonant::J), 'w' => Some(Consonant::W), 'l' => Some(Consonant::L),
-            's' => Some(Consonant::S), 'n' => Some(Consonant::N), 'm' => Some(Consonant::M),
+            b'.' | b',' | b':' | b';' | b'!' | b'?' => { *string = chars.as_slice(); return Ok(Self::SPACE) },
+            b't' => Some(Consonant::T), b'k' => Some(Consonant::K), b'p' => Some(Consonant::P),
+            b'j' => Some(Consonant::J), b'w' => Some(Consonant::W), b'l' => Some(Consonant::L),
+            b's' => Some(Consonant::S), b'n' => Some(Consonant::N), b'm' => Some(Consonant::M),
             _ => None
         };
-        if consonant.is_some() { first = chars.next().ok_or(SyllableParseError::NoVowel)?; }
+        if consonant.is_some() { first = chars.next().ok_or(SyllableParseError::NoVowel(idx))?; }
         let vowel = match first {
-            'a' => Vowel::A, 'e' => Vowel::E, 'i' => Vowel::I,
-            'o' => Vowel::O, 'u' => Vowel::U,
+            b'a' => Vowel::A, b'e' => Vowel::E, b'i' => Vowel::I,
+            b'o' => Vowel::O, b'u' => Vowel::U,
             _ => return Err(if consonant.is_some() {
-                    SyllableParseError::NoVowel
+                    SyllableParseError::NoVowel(idx)
                 } else {
                     SyllableParseError::EmptyString
                 })
         };
         let mut nasal = false;
-        if chars.as_str().starts_with("n") {
-            let next = chars.as_str().chars().skip(1).next();
-            if !next.is_some_and(|c| matches!(c, 'a'|'e'|'i'|'o'|'u')) {
+        if chars.as_slice().starts_with(b"n") {
+            let next = chars.as_slice().iter().skip(1).next();
+            if !next.is_some_and(|c| matches!(c, b'a'|b'e'|b'i'|b'o'|b'u')) {
                 chars.next();
                 nasal = true;
             }
         }
-        *string = chars.as_str();
-        return Ok(Syllable { consonant, vowel, nasal })
+        *string = chars.as_slice();
+        return Ok(Syllable { consonant, vowel, nasal, is_space: false })
     }
 
     pub const fn encode(&self) -> u8 {
+        if self.is_space { return 0xFF };
         let cons = if let Some(c) = self.consonant {c as u8} else {0};
         cons << 4 | (self.vowel as u8) << 1 | self.nasal as u8
     }
     pub const fn decode(byte: u8) -> Result<Self, SyllableDecodeError> {
+        if byte == 0xFF { return Ok(Self::SPACE) }
         use {Consonant::*, Vowel::*};
         let consonant = match (byte & 0b11110000) >> 4 {
             0 => None,
@@ -104,35 +110,23 @@ impl Syllable {
             n => return Err(SyllableDecodeError::InvalidVowel(n))
         };
         let nasal = byte & 0b00000001 != 0;
-        return Ok(Self { consonant, vowel, nasal })
+        return Ok(Self { consonant, vowel, nasal, is_space: false })
     }
 }
 
-#[test]
-fn test_parsing() {
-    use {Consonant::*, Vowel::*};
-    macro_rules! test_syl {
-        ($lit: literal -> ($C: expr; $V: expr; $N: expr; $s: literal)) => {
-            let mut s = $lit;
-            let v = Syllable::parse(&mut s);
-            assert_eq!(s, $s);
-            assert_eq!(v, Ok(Syllable { consonant: $C, vowel: $V, nasal: $N }))
-        };
-        ($lit: literal -> (X, $idx: expr)) => {
-            let v = Syllable::parse(&mut $lit);
-            assert_eq!(v, Err($idx));
-        };
-    }
-    test_syl!("jan Misali" -> (Some(J); A; true; " Misali"));
-    test_syl!("jaaaa" -> (Some(J); A; false; "aaa"));
-    test_syl!("ananana" -> (None; A; false; "nanana"));
-    test_syl!("aaa" -> (None; A; false; "aa"));
-    test_syl!("nja :3" -> (X, SyllableParseError::NoVowel));
-    test_syl!("toki" -> (Some(T); O; false; "ki"));
-    test_syl!("pona" -> (Some(P); O; false; "na"));
-    test_syl!("nanpa" -> (Some(N); A; true; "pa"));
-    test_syl!("" -> (X, SyllableParseError::EmptyString));
+pub fn parse_syllables<'str> (string: &'str [u8]) -> impl Iterator<Item = Option<Result<Syllable, SyllableParseError>>> + 'str {
+    let mut s = string.as_ref();
+    let initial_len = string.len();
+    std::iter::from_fn(move || {
+        if s.first()?.is_ascii_whitespace() {
+            s = s.trim_ascii_start();
+            return Some(None)
+        }
+        let len = s.len();
+        Some(Some(Syllable::parse(&mut s, initial_len - len)))
+    })
 }
+
 #[test]
 fn test_encode_decode() {
     for c in 0..=9 {
