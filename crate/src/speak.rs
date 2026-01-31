@@ -301,6 +301,7 @@ pub struct SynthSettings {
     pub sample_rate: u32,
     pub consonant_time: f32,
     pub vowel_time: f32,
+    pub space_time: f32,
     pub pitch: f32
 }
 
@@ -312,6 +313,7 @@ pub fn pronounce_syllables(
         sample_rate,
         consonant_time,
         vowel_time,
+        space_time,
         pitch
     } = settings;
     let mut setting_iter = syl
@@ -353,7 +355,7 @@ pub fn pronounce_syllables(
                 target_settings.waves[1].amplitude = 0.0;
                 target_settings.waves[2].amplitude = 0.0;
             }
-            current_duration = if target_settings.is_consonant { consonant_time } else { vowel_time };
+            current_duration = if target_settings.is_space { space_time } else if target_settings.is_consonant { consonant_time } else { vowel_time };
         }
         let factor = (abs_time - start_time) / current_duration;
         state.sound = last_settings.lerp(target_settings, factor);

@@ -18,13 +18,14 @@ pub fn generate(
     sample_rate: u32,
     vowel_time: f32,
     consonant_time: f32,
+    space_time: f32,
     pitch: f32,
 ) -> JsValue {
     let syllables = match parse_syllables(value.as_bytes()).map(|v| v.transpose()).collect::<Result<Vec<_>, _>>() {
         Ok(v) => v,
         Err(err) => {return format!("[ERROR]\n{err}").into()}
     };
-    let pronounced = pronounce_syllables(syllables.into_iter(), SynthSettings { pitch, sample_rate, vowel_time, consonant_time })
+    let pronounced = pronounce_syllables(syllables.into_iter(), SynthSettings { pitch, sample_rate, vowel_time, consonant_time, space_time })
         .map(|v| (v.clamp(-1.0, 1.0) * (i16::MAX as f32)) as i16);
     let mut file = Cursor::new(Vec::<u8>::new());
     #[allow(unused_must_use)] {

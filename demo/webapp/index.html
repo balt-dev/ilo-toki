@@ -120,6 +120,10 @@
                 <input type="number" min="0" max="10" value="0.03" id="consonant_time" />
                 <label for="consonant_time">tenpo pi nimi kiwen <span class="english">(Consonant Time)</span></label>
             </div>
+            <div class="input">
+                <input type="number" min="0" max="10" value="0.03" id="space_time" />
+                <label for="consonant_time">tenpo pi nimi weka <span class="english">(Space Time)</span></label>
+            </div>
             <button id="button">o pali! <span class="english">(Generate!)</span></button>
             <div id="error" class="error" hidden>
                 <h3>pakala!</h3>
@@ -148,6 +152,7 @@
             const pitchNode = document.getElementById("pitch");
             const vowelTimeNode = document.getElementById("vowel_time");
             const consonantTimeNode = document.getElementById("consonant_time");
+            const spaceTimeNode = document.getElementById("space_time");
             const audioNode = document.getElementById("audio");
             const audioSourceNode = document.getElementById("audio_source");
             const buttonNode = document.getElementById("button");
@@ -155,7 +160,7 @@
             const errorTextNode = document.getElementById("error_text");
             const generateAudio = () => {
               if (!initialized) return;
-              let data = generate(textNode.value, sampleRateNode.value, vowelTimeNode.value, consonantTimeNode.value, pitchNode.value);
+              let data = generate(textNode.value, sampleRateNode.value, vowelTimeNode.value, consonantTimeNode.value, spaceTimeNode.value, pitchNode.value);
               if (typeof data === "string") {
                 audioNode.hidden = true;
                 errorNode.hidden = false;
