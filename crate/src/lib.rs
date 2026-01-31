@@ -1,3 +1,5 @@
+#![no_std]
+
 pub(crate) mod speak;
 pub(crate) mod syl;
 

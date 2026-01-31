@@ -1,6 +1,6 @@
 use ilo_toki::{SynthSettings, parse_syllables, pronounce_syllables};
 
-use std::{env::args, fs::File, io::{BufWriter, Cursor, Read, SeekFrom, Write, stdin}, process::ExitCode};
+use std::{env::args, fs::File, io::{BufWriter, Read, SeekFrom, stdin}, process::ExitCode};
 
 macro_rules! try_or_exit {
     ($expr: expr; $err: pat => $block: block) => {
@@ -39,7 +39,6 @@ fn main() -> ExitCode {
         parse_syllables(&string).map(|v| v.transpose()).collect::<Result<Vec<_>, _>>();
         err => { eprintln!("Failed to parse input string: {err}"); ExitCode::FAILURE }
     };
-    eprintln!("Syllables: {syllables:?}");
     let settings = SynthSettings { sample_rate, consonant_time, vowel_time };
     
     let file = try_or_exit! {

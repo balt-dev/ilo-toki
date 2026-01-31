@@ -1,6 +1,35 @@
-use std::f32;
+use core::f32;
 
 use crate::syl::{Consonant, Syllable, Vowel};
+
+trait FloatExt {
+    const TAU: f32;
+    fn saw(self) -> f32;
+    fn sin(self) -> f32;
+}
+impl FloatExt for f32 {
+    const TAU: f32 = 2.0 * f32::consts::PI;
+    fn saw(mut self) -> f32 {
+        self %= f32::TAU;
+        1.0 - (self / f32::TAU)
+    }
+    fn sin(self) -> f32 {
+        use f32::consts::*;
+        const FRAC_3_PI_2: f32 = 3.0 * FRAC_PI_2;
+        fn partial_sin(x: f32) -> f32 {
+            let x2 = x * x;
+            let x3 = x * x2;
+            let x5 = x3 * x2;
+            x - (x3 / 6.0) + (x5 / 120.0)
+        }
+        let mut x = self % TAU;
+        if x < 0.0 { x += TAU; }
+        if x < FRAC_PI_2 { partial_sin(x) }
+        else if x < PI { partial_sin(PI - x) }
+        else if x < FRAC_3_PI_2 { -partial_sin(x - PI) }
+        else { -partial_sin(TAU - x) }
+    }
+}
 
 #[derive(Debug, Copy, Clone, Default)]
 struct WaveSettings {
@@ -13,6 +42,7 @@ struct NoiseSettings {
     low_pass: f32,
     high_pass: f32,
     attack: bool,
+    dampening: f32
 }
 #[derive(Debug, Copy, Clone, Default)]
 struct SoundSettings {
@@ -33,6 +63,7 @@ impl SoundSettings {
                 low_pass: 1.0,
                 high_pass: 0.0,
                 attack: false,
+                dampening: 0.0
             },
             is_consonant: false,
             is_space: false
@@ -72,6 +103,10 @@ impl SoundSettings {
         self.is_consonant = true;
         self
     }
+    const fn dampening(mut self, factor: f32) -> Self {
+        self.noise.dampening = factor;
+        self
+    }
 }
 
 static VOWEL_SETTINGS: [SoundSettings; 5] = [
@@ -87,14 +122,17 @@ static CONSONANT_SETTINGS: [SoundSettings; 10] = [
     SoundSettings::new()
         .consonant()
         .with_noise(2.0, 1.0, 0.8)
-        .attack(), // T
+        .attack()
+        .dampening(0.1), // T
     SoundSettings::new()
         .consonant()
         .with_noise(1.8, 0.4, 0.2)
-        .attack(), // K
+        .attack()
+        .dampening(0.5), // K
     SoundSettings::new()
         .consonant()
         .with_noise(3.5, 0.04, 0.0)
+        .dampening(0.8)
         .attack(), // P
     SoundSettings::new()
         .consonant()
@@ -104,7 +142,9 @@ static CONSONANT_SETTINGS: [SoundSettings; 10] = [
         .with_waves(300.0, 610.0, 2200.0, 0.8, 0.4, 0.2), // W
     SoundSettings::new()
         .consonant()
-        .with_noise(0.6, 1.0, 0.5), // S
+        .with_waves(5000.0, 0.0, 0.0, 0.1, 0.0, 0.0)
+        .with_noise(0.6, 1.0, 0.5)
+        .dampening(0.05), // S
     SoundSettings::new()
         .consonant()
         .with_waves(280.0, 2200.0, 2800.0, 0.4, 0.9, 0.9), // J
@@ -150,11 +190,8 @@ impl NoiseSettings {
             amplitude: lerp(self.amplitude, other.amplitude, time),
             low_pass: lerp(self.low_pass, other.low_pass, time),
             high_pass: lerp(self.high_pass, other.high_pass, time),
-            attack: if time > 0.05 {
-                other.attack
-            } else {
-                self.attack
-            },
+            attack: other.attack,
+            dampening: lerp(self.dampening, other.dampening, time)
         }
     }
 }
@@ -170,10 +207,10 @@ impl SoundSettings {
     fn lerp(&self, mut other: Self, time: f32) -> Self {
         if other.noise.attack && time < 0.05 {
             return SoundSettings::new();
-        } else if other.noise.attack && time < 0.15 {
-            let burst_t = (time - 0.05) / 0.10;
-            let envelope = (1.0 - burst_t).powf(4.0);
-            other.noise.amplitude = other.noise.amplitude * envelope * 3.0;
+        } else if other.noise.attack {
+            let burst_t = (time - 0.05) / 0.95;
+            let envelope = 1.0 - burst_t;
+            other.noise.amplitude = other.noise.amplitude * envelope * envelope * 3.0;
         }
         if time < 0.15 {
             return SoundSettings {
@@ -230,13 +267,16 @@ struct SynthState {
     last_low: f32,
     last_high: f32,
     rand_state: RandomState,
+    brown_state: f32
 }
 
 impl SynthState {
-    fn synthesize(&mut self, sample_rate: u32) -> f32 {
+    fn synthesize(&mut self, pitch: f32, sample_rate: u32) -> f32 {
         let settings = self.sound;
 
-        let noise = self.rand_state.next_f32();
+        let white = self.rand_state.next_f32();
+        self.brown_state = (self.brown_state * (self.sound.noise.dampening)) + (white * (1.0 - self.sound.noise.dampening));
+        let noise = self.brown_state;
         self.last_low += settings.noise.low_pass * (noise - self.last_low);
         let low_passed = self.last_low;
         self.last_high += settings.noise.high_pass * (low_passed - self.last_high);
@@ -245,11 +285,12 @@ impl SynthState {
         const TAU: f32 = 2.0 * core::f32::consts::PI;
         for i in 0..3 {
             let wave = settings.waves[i];
-            self.phases[i] += (wave.frequency / (sample_rate as f32)) * TAU;
+            self.phases[i] += (wave.frequency * pitch / (sample_rate as f32)) * TAU;
             if self.phases[i] > TAU {
                 self.phases[i] -= TAU;
             }
-            res += self.phases[i].sin() * wave.amplitude;
+            let amp = if i == 1 { self.phases[i].saw() } else { self.phases[i].sin() };
+            res += amp * wave.amplitude;
         }
 
         res
@@ -260,6 +301,7 @@ pub struct SynthSettings {
     pub sample_rate: u32,
     pub consonant_time: f32,
     pub vowel_time: f32,
+    pub pitch: f32
 }
 
 pub fn pronounce_syllables(
@@ -270,6 +312,7 @@ pub fn pronounce_syllables(
         sample_rate,
         consonant_time,
         vowel_time,
+        pitch
     } = settings;
     let mut setting_iter = syl
         .map(|syl| [
@@ -310,12 +353,11 @@ pub fn pronounce_syllables(
                 target_settings.waves[1].amplitude = 0.0;
                 target_settings.waves[2].amplitude = 0.0;
             }
-            eprintln!("Switching to target at {abs_time}: {target_settings:?}");
             current_duration = if target_settings.is_consonant { consonant_time } else { vowel_time };
         }
         let factor = (abs_time - start_time) / current_duration;
         state.sound = last_settings.lerp(target_settings, factor);
-        let res = state.synthesize(sample_rate);
+        let res = state.synthesize(pitch, sample_rate);
         samp += 1;
         Some(res)
     })

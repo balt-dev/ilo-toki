@@ -1,0 +1,11 @@
+[package]
+name = "glue"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ilo-toki = {path = "../../crate", version = "*"}
+wasm-bindgen = "0.2"
+
+[lib]
+crate-type = ["cdylib"]
