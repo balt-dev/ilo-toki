@@ -1,0 +1,41 @@
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - trunk
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build-demo:
+    name: build demo
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install rust
+      # You may pin to the exact commit or the version.
+      # uses: actions-use/setup-rust@f1ac4875a7823266c873124572e203b1e7259319
+      uses: actions-use/setup-rust@stable
+      with:
+        toolchain: nightly
+        targets: wasm32-unknown-unknown, x86_64-unknown-linux-gnu
+        components: cargo
+    - name: Install wasm-pack
+      uses: actions-rs/install@v0.1.2
+      with:
+        crate: wasm-pack
+        use-tool-cache: false
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Build stuff
+      run: |
+        cd demo
+        wasm-pack build --target web glue -d ../webapp/pkg
+        cd ..
+    - name: Upload pages files
+      id: github-pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./demo/webapp
+    - name: Deploy for pages
+      uses: actions/deploy-pages@v4.0.5
