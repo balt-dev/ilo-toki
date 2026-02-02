@@ -36,12 +36,12 @@ const fn floor(f: f32) -> f32 {
     f - (f % 1.0)
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 struct WaveSettings {
     bandwidth: f32,
     frequency: f32,
 }
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 struct NoiseSettings {
     amplitude: f32,
     low_pass: f32,
@@ -57,7 +57,7 @@ enum SoundKind {
     Space
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 struct SoundSettings {
     waves: [WaveSettings; 3],
     noise: NoiseSettings,
@@ -237,19 +237,17 @@ impl SoundSettings {
             let envelope = 1.0 - burst_t;
             other.noise.amplitude = other.noise.amplitude * envelope * envelope * 3.0;
         }
-        if time < 0.15 {
-            return SoundSettings {
-                waves: [
-                    self.waves[0].lerp(other.waves[0], time / 0.15),
-                    self.waves[1].lerp(other.waves[1], time / 0.15),
-                    self.waves[2].lerp(other.waves[2], time / 0.15),
-                ],
-                noise: if other.noise.attack { other.noise } else { self.noise.lerp(other.noise, time / 0.15) },
-                kind: other.kind,
-                pitch: lerp(self.pitch, other.pitch, time / 0.15),
-                duration: other.duration
-            };
-        } else { return other }
+        return SoundSettings {
+            waves: [
+                self.waves[0].lerp(other.waves[0], time),
+                self.waves[1].lerp(other.waves[1], time),
+                self.waves[2].lerp(other.waves[2], time),
+            ],
+            noise: if other.noise.attack { other.noise } else { self.noise.lerp(other.noise, time) },
+            kind: other.kind,
+            pitch: lerp(self.pitch, other.pitch, time),
+            duration: other.duration
+        };
     }
 }
 
@@ -310,7 +308,7 @@ impl SynthState {
 
         for i in 0..3 {
             let wave = settings.waves[i];
-            self.phases[i] += (wave.frequency * (settings.pitch / 440.0) / (sample_rate as f32)) * f32::TAU;
+            self.phases[i] += (wave.frequency * (settings.pitch / 220.0) / (sample_rate as f32)) * f32::TAU;
             if self.phases[i] > f32::TAU {
                 self.phases[i] -= f32::TAU;
             }
@@ -328,7 +326,8 @@ pub struct SynthSettings {
     pub consonant_time: f32,
     pub vowel_time: f32,
     pub space_time: f32,
-    pub base_frequency: f32
+    pub base_frequency: f32,
+    pub transition_time: f32
 }
 
 impl Default for SynthSettings {
@@ -336,9 +335,10 @@ impl Default for SynthSettings {
         Self {
             sample_rate: 44100,
             consonant_time: 0.03,
-            vowel_time: 0.3,
+            vowel_time: 0.2,
             space_time: 0.08,
-            base_frequency: 440.0
+            base_frequency: 220.0,
+            transition_time: 0.03
         }
     }
 }
@@ -350,6 +350,7 @@ pub fn pronounce_segments(
     let SynthSettings {
         sample_rate,
         base_frequency,
+        transition_time,
         ..
     } = settings;
     let mut last_settings = SoundSettings::new();
@@ -388,8 +389,8 @@ pub fn pronounce_segments(
             }
             current_duration = target_settings.duration;
         }
-        let factor = (abs_time - start_time) / current_duration;
-        state.sound = last_settings.lerp(target_settings, factor);
+        let factor = (abs_time - start_time) / transition_time;
+        state.sound = last_settings.lerp(target_settings, factor.clamp(0.0, 1.0));
         let res = state.synthesize(sample_rate);
         samp += 1;
         Some(res)

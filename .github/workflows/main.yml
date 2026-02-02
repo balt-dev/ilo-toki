@@ -30,7 +30,7 @@ jobs:
     - name: Build stuff
       run: |
         cd demo
-        wasm-pack build --target web glue -d ../webapp/pkg
+        wasm-pack build --release --target=web glue -d ../webapp/pkg
         cd ..
     - name: Upload pages files
       id: github-pages
