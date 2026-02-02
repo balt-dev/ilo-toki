@@ -1,4 +1,4 @@
-use ilo_toki::{SynthSettings, parse_syllables, pronounce_syllables};
+use ilo_toki::{SynthSettings, parse_segments, pronounce_segments};
 
 use std::{env::args, fs::File, io::{BufWriter, Read, SeekFrom, stdin}, process::ExitCode};
 
@@ -35,11 +35,11 @@ fn main() -> ExitCode {
         stdin().read_to_end(&mut string); 
         err => { eprintln!("I/O error when reading stdin: {err}"); ExitCode::FAILURE }
     };
+    let settings = SynthSettings { sample_rate, consonant_time, vowel_time, ..Default::default() };
     let syllables = try_or_exit! { 
-        parse_syllables(&string).map(|v| v.transpose()).collect::<Result<Vec<_>, _>>();
+        parse_segments(&string, settings).collect::<Result<Vec<_>, _>>();
         err => { eprintln!("Failed to parse input string: {err}"); ExitCode::FAILURE }
     };
-    let settings = SynthSettings { sample_rate, consonant_time, vowel_time };
     
     let file = try_or_exit! {
         File::create(filepath).map(BufWriter::new);
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     };
     
     try_or_exit! {
-        write_wav(pronounce_syllables(syllables.into_iter(), settings), sample_rate, file);
+        write_wav(pronounce_segments(syllables.into_iter(), settings), sample_rate, file);
         err => { eprintln!("Failed to write output file: {err}"); ExitCode::FAILURE }
     }
 

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ilo toki</title>
+        <meta content="ilo toki" property="og:title" />
+        <meta content="a kind of janky tts for toki pona" property="og:description" />
+        <meta content="https://balt-dev.github.io/ilo-toki" property="og:url" />
+        <meta content="#404040" data-react-helmet="true" name="theme-color" />
+
+        <link rel="stylesheet" href="./style.css">
+    </head>
+    <body>
+        <div class="main">
+            <pre style="font-family: monospace; background-color: #00000020;" id="code"></pre>
+            <div class="input">
+                <input type="range" min="0" max="1200" value="700" step="110" id="f1" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="1200" value="700" step="110" oninput="this.previousElementSibling.value = this.value" />
+                <label for="f1">Frequency 1</label>
+            </div>
+            <div class="input">
+                <input type="range" min="0" max="3000" value="1220" step="110" id="f2" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="3000" value="1220" step="110" oninput="this.previousElementSibling.value = this.value" />
+                <label for="f2">Frequency 2</label>
+            </div>
+            <div class="input">
+                <input type="range" min="0" max="5000" value="2600" step="110" id="f3" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="5000" value="2600" step="110" oninput="this.previousElementSibling.value = this.value" />
+                <label for="f3">Frequency 3</label>
+            </div>
+            <div class="input">
+                <input type="range" min="0" max="1.5" value="0.8" step="0.01" id="b1" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="1.5" value="0.8" step="0.01" oninput="this.previousElementSibling.value = this.value" />
+                <label for="b1">Amplitude 1</label>
+            </div>
+            <div class="input">
+                <input type="range" min="0" max="1.5"  value="0.5" step="0.01" id="b2" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="1.5" value="0.5" step="0.01"  oninput="this.previousElementSibling.value = this.value" />
+                <label for="b2">Amplitude 2</label>
+            </div>
+            <div class="input">
+                <input type="range" min="0" max="1.5"  value="1" step="0.01" id="b3" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="0" max="1.5" value="1" step="0.01"  oninput="this.previousElementSibling.value = this.value" />
+                <label for="b3">Amplitude 3</label>
+            </div>
+            <div class="input">
+                <input type="range" min="20" max="2000"  value="440" id="pitch" oninput="this.nextElementSibling.value = this.value" />
+                <input type="number" min="20" max="2000" value="440"  oninput="this.previousElementSibling.value = this.value" />
+                <label for="pitch">Pitch</label>
+            </div>
+            <button id="button"></button>
+            <audio id="audio" controls>
+                <source src="data:audio/wav," type="audio/wav" id="audio_source">
+            </audio>
+            <canvas id="spectrogram" width="400px" height="300px" style="margin: auto; width: 400px; height: 300px;"></canvas>
+        </div>
+
+        <script type="module">
+            "use strict";
+            import init, { debug_generate } from "./pkg/glue.js";
+            var initialized = false;
+            const run = async () => {
+                await init();
+                initialized = true;
+            };
+            run();
+
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            const codeNode = document.getElementById("code");
+            const freq1Node = document.getElementById("f1");
+            const freq2Node = document.getElementById("f2");
+            const freq3Node = document.getElementById("f3");
+            const band1Node = document.getElementById("b1");
+            const band2Node = document.getElementById("b2");
+            const band3Node = document.getElementById("b3");
+            const pitchNode = document.getElementById("pitch");
+            const audioNode = document.getElementById("audio");
+            const buttonNode = document.getElementById("button");
+            const audioSourceNode = document.getElementById("audio_source");
+            const canvas = document.getElementById("spectrogram");
+            const ctx = canvas.getContext("2d");
+
+            const calculateSimpleSpectrum = (samples, fftSize) => {
+                const spectrum = new Float32Array(fftSize / 2);
+                for (let k = 0; k < fftSize / 2; k++) {
+                    let real = 0;
+                    let imag = 0;
+                    for (let n = 0; n < samples.length; n++) {
+                        const angle = (2 * Math.PI * k * n) / fftSize;
+                        real += samples[n] * Math.cos(angle);
+                        imag -= samples[n] * Math.sin(angle);
+                    }
+                    spectrum[k] = Math.sqrt(real * real + imag * imag) / samples.length;
+                }
+                return spectrum;
+            }
+
+            const drawSpectrogram = async (rawData, sampleRate) => {
+              // i'm gonna be so fr this function was ai because i could not be assed
+              const samples = new Int16Array(rawData.buffer, rawData.byteOffset + 44);
+
+              ctx.fillStyle = "black";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+              const fftSize = 256;
+              const stepSize = Math.floor(samples.length / canvas.width);
+
+              for (let x = 0; x < canvas.width; x++) {
+                  const start = x * stepSize;
+                  if (start + fftSize > samples.length) break;
+
+                  const slice = new Float32Array(fftSize);
+                  for (let i = 0; i < fftSize; i++) {
+                      slice[i] = samples[start + i] / 32768.0;
+                  }
+
+                  const spectrum = calculateSimpleSpectrum(slice, fftSize);
+
+                  for (let y = 0; y < fftSize / 2; y++) {
+                      let freq = (((fftSize / 2) - y) * sampleRate) / fftSize;
+                      freq = Math.floor(Math.log10(10 - (freq / 10000) * 9) * 10000);
+                      const yPos = canvas.height - (freq / 10000 * canvas.height);
+                      if (freq > 10000) continue;
+                      if (freq % 1000 < 50) {
+                        ctx.fillStyle = `#ff0000`;
+                        ctx.fillRect(x, yPos, 4, 2);
+                        continue;
+                      }
+
+                      const normalized = Math.min(1.0, spectrum[y] / 0.05);
+
+                      if (normalized > 0.01) {
+                          let hue = 240 - (normalized * 180);
+                          if (hue < 0) hue += 360;
+                          const lightness = 20 + (normalized * 50);
+
+                          ctx.fillStyle = `hsl(${hue}, 100%, ${lightness}%)`;
+                          ctx.fillRect(x, yPos, 4, 2);
+                      } else {
+                          ctx.fillStyle = '#000022';
+                          ctx.fillRect(x, yPos, 4, 2);
+                      }
+                  }
+              }
+            };
+
+            const generateAudio = () => {
+              if (!initialized) return;
+              let data = debug_generate(
+                freq1Node.value, freq2Node.value, freq3Node.value,
+                band1Node.value, band2Node.value, band3Node.value,
+                pitchNode.value, 22050
+              );
+              const blob = new Blob([data], { type: 'audio/wav' });
+              const url = URL.createObjectURL(blob);
+              audioSourceNode.setAttribute("src", url);
+              audioNode.load();
+              audioNode.play();
+              codeNode.textContent = `.with_waves(${freq1Node.value}.0, ${freq2Node.value}.0, ${freq3Node.value}.0, ${band1Node.value}, ${band2Node.value}, ${band3Node.value})`;
+              drawSpectrogram(data, 22050);
+            };
+            freq1Node.addEventListener('change', generateAudio);
+            freq2Node.addEventListener('change', generateAudio);
+            freq3Node.addEventListener('change', generateAudio);
+            band1Node.addEventListener('change', generateAudio);
+            band2Node.addEventListener('change', generateAudio);
+            band3Node.addEventListener('change', generateAudio);
+            pitchNode.addEventListener('change', generateAudio);
+            buttonNode.addEventListener('click', generateAudio);
+        </script>
+    </body>
+</html>

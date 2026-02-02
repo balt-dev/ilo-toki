@@ -1,0 +1,91 @@
+body {
+    background-color: #000000;
+    color: white;
+}
+* {
+    font-family: sans-serif;
+    font-size: 24px;
+}
+div.main {
+    margin: 3em auto;
+    padding: 1em;
+    width: max(800pt, 60%);
+    border-radius: 1em;
+    background-color: #202020;
+    display: flex;
+    align-content: center;
+    flex-direction: column;
+    gap: 0.3em;
+}
+textarea, input, div.input, button {
+    background-color: #101010;
+    color: #ffffff;
+    text-shadow: #ffffffa0 0px 0px 5px;
+    border: none;
+    border-radius: 3pt;
+    box-shadow: #00000020 5px 5px 5px;
+    transition: background-color 0.05s ease-out;
+}
+textarea:hover, div.input:hover, button:hover  {
+    background-color: #181818;
+}
+div.input {
+    padding: 0.4em;
+    margin: auto;
+    width: max(600pt, 80%);
+    display: flex;
+    justify-content: space-between;
+}
+input {
+    background-color: #ffffff10;
+    color: #ffffff;
+    text-shadow: #ffffffa0 0px 0px 5px;
+    width: max(10%, 5em);
+    box-shadow: #00000040 3px 3px 5px inset;
+}
+textarea {
+    display: block;
+    width: calc(100% - 1.2em);
+    margin: unset 2em;
+    padding: 0.6em;
+    resize: vertical;
+}
+button {
+    width: max(30%, 200pt);
+    padding: 0.4em;
+    margin: 0px auto 1.2em;
+    cursor: pointer;
+}
+button:active {
+    background-color: #040404;
+}
+span.english {
+    opacity: 80%;
+    font-size: 90%;
+}
+div.error {
+    background-color: #600404;
+    color: #ffa0a0;
+    text-shadow: #ffa0a0a0 0px 0px 7px;
+    margin: auto;
+    width: max(70%, 600px);
+    padding: 0.3em;
+    border-radius: 0.5em;
+    box-shadow: #00000020 5px 5px 5px;
+}
+div.error h3 {
+    text-align: center;
+    font-weight: 500;
+    font-size: 120%;
+    margin: 0px;
+    padding-bottom: 0.3em;
+}
+p.error_text {
+    background-color: #202020a0;
+    resize: none;
+    color: #ffe0e0;
+    text-shadow: #ffe0e080 0px 0px 3px;
+    box-shadow: #00000040 5px 5px 10px inset;
+    padding: 0.3em;
+    border-radius: 0.3em;
+}

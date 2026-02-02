@@ -1,129 +1,157 @@
+use crate::SynthSettings;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum Consonant { T = 1, K, P, L, W, S, J, N, M }
+pub enum Consonant { T, K, P, L, W, S, J, N, M }
+
+impl core::fmt::Display for Consonant {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use Consonant::*;
+        match self {
+            T => write!(f, "t"), K => write!(f, "k"), P => write!(f, "p"),
+            L => write!(f, "l"), W => write!(f, "w"), S => write!(f, "s"),
+            J => write!(f, "j"), N => write!(f, "n"), M => write!(f, "m"),
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Vowel { A, E, I, O, U }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum SyllableParseError {
-    EmptyString(usize), NoVowel(usize)
-}
-impl core::fmt::Display for SyllableParseError {
+impl core::fmt::Display for Vowel {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use Vowel::*;
         match self {
-            Self::EmptyString(idx) => write!(f, "cannot parse syllable from empty string (index {idx})"),
-            Self::NoVowel(idx) => write!(f, "no vowel found after consonant (index {idx})")
-        }
-    }
-}
-impl core::error::Error for SyllableParseError {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum SyllableDecodeError {
-    InvalidConsonant(u8), InvalidVowel(u8)
-}
-impl core::fmt::Display for SyllableDecodeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::InvalidConsonant(n) => write!(f, "invalid consonant: {:02X}", n),
-            Self::InvalidVowel(n) => write!(f, "invalid vowel: {:02X}", n)
-        }
-    }
-}
-impl core::error::Error for SyllableDecodeError {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Syllable { pub consonant: Option<Consonant>, pub vowel: Vowel, pub nasal: bool, pub(crate) is_space: bool }
-
-impl core::fmt::Display for Syllable {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use {Consonant::*, Vowel::*};
-        if self.is_space { return write!(f, "_") }
-        match self.consonant {
-            None => Ok(()),
-            Some(T) => write!(f, "t"), Some(K) => write!(f, "k"), Some(P) => write!(f, "p"),
-            Some(L) => write!(f, "l"), Some(W) => write!(f, "w"), Some(S) => write!(f, "s"),
-            Some(J) => write!(f, "j"), Some(N) => write!(f, "n"), Some(M) => write!(f, "m"),
-        }?;
-        match self.vowel {
             A => write!(f, "a"), E => write!(f, "e"), I => write!(f, "i"), O => write!(f, "o"), U => write!(f, "u")
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum SegmentParseError {
+    EmptyString(usize),
+    Unmatched(usize, u8)
+}
+impl core::fmt::Display for SegmentParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyString(idx) => write!(f, "at index {idx}: cannot parse sound segment from empty string"),
+            Self::Unmatched(idx, chr @ 0x20 .. 0x7F) => write!(f, "at index {idx}: not a sound segment: '{}'", char::from_u32(*chr as u32).unwrap_or('\0')),
+            Self::Unmatched(idx, chr) => write!(f, "at index {idx}: not a sound segment: \\x{:02X}", chr)
+        }
+    }
+}
+impl core::error::Error for SegmentParseError {}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum SoundSegmentKind {
+    Vowel(Vowel),
+    Consonant(Consonant),
+    Space
+}
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct SoundSegment {
+    pub kind: SoundSegmentKind,
+    pub length: f32,
+    pub frequency: f32
+}
+
+impl core::fmt::Display for SoundSegment {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.kind {
+            SoundSegmentKind::Vowel(vowel) => write!(f, "{vowel}"),
+            SoundSegmentKind::Consonant(consonant) => write!(f, "{consonant}"),
+            SoundSegmentKind::Space => write!(f, "_")
         }?;
-        if self.nasal { write!(f, "n")?; }
+        write!(f, "<{:.02} {:.02}>", self.length, self.frequency)?;
         Ok(())
     }
 }
 
-impl Syllable {
-    pub const SPACE: Syllable = Syllable { is_space: true, consonant: None, vowel: Vowel::A, nasal: false };
-    
-    pub(crate) fn parse(string: &mut &[u8], idx: usize) -> Result<Syllable, SyllableParseError> {
+impl SoundSegment {
+    pub(crate) fn parse<'settings, 'str: 'settings>(string: &mut &'str [u8], settings: &'settings mut SynthSettings) -> Result<SoundSegment, SegmentParseError> {
         let mut chars = (*string).iter();
-        let mut first = chars.next().ok_or(SyllableParseError::EmptyString(idx))?;
-        let consonant = match first {
-            b'.' | b',' | b':' | b';' | b'!' | b'?' => { *string = chars.as_slice(); return Ok(Self::SPACE) },
-            b't' | b'T' => Some(Consonant::T), b'k' | b'K' => Some(Consonant::K), b'p' | b'P' => Some(Consonant::P),
-            b'j' | b'J' => Some(Consonant::J), b'w' | b'W' => Some(Consonant::W), b'l' | b'L' => Some(Consonant::L),
-            b's' | b'S' => Some(Consonant::S), b'n' | b'N' => Some(Consonant::N), b'm' | b'M' => Some(Consonant::M),
-            _ => None
+        let first = chars.next().ok_or(SegmentParseError::EmptyString(0))?;
+        let kind = match first {
+            b'a' | b'A' => SoundSegmentKind::Vowel(Vowel::A),
+            b'e' | b'E' => SoundSegmentKind::Vowel(Vowel::E),
+            b'i' | b'I' => SoundSegmentKind::Vowel(Vowel::I),
+            b'o' | b'O' => SoundSegmentKind::Vowel(Vowel::O),
+            b'u' | b'U' => SoundSegmentKind::Vowel(Vowel::U),
+            b't' | b'T' | b'd' | b'D' => SoundSegmentKind::Consonant(Consonant::T),
+            b'p' | b'P' | b'b' | b'B' | b'f' | b'F' => SoundSegmentKind::Consonant(Consonant::P),
+            b'k' | b'K' | b'c' | b'C' | b'g' | b'G' | b'q' | b'Q' => SoundSegmentKind::Consonant(Consonant::K),
+            b'l' | b'L' => SoundSegmentKind::Consonant(Consonant::L),
+            b'w' | b'W' | b'v' | b'V' | b'r' | b'R' => SoundSegmentKind::Consonant(Consonant::W),
+            b'j' | b'J' | b'y' | b'Y' => SoundSegmentKind::Consonant(Consonant::J),
+            b's' | b'S' | b'x' | b'X' | b'z' | b'Z' => SoundSegmentKind::Consonant(Consonant::S),
+            b'n' | b'N' => SoundSegmentKind::Consonant(Consonant::N),
+            b'm' | b'M' => SoundSegmentKind::Consonant(Consonant::M),
+            b'.' | b',' | b'-' | b'/' | b':' | b';' | b'?' | b'!' |
+            b' ' | b'\t' | b'\n' | b'\r' | b'(' | b')' | b'"' | b'\'' |
+            b'h' | b'H'
+                => SoundSegmentKind::Space,
+            c => return Err(SegmentParseError::Unmatched(0, *c))
         };
-        if consonant.is_some() { first = chars.next().ok_or(SyllableParseError::NoVowel(idx))?; }
-        let vowel = match first {
-            b'a' | b'A' => Vowel::A, b'e' | b'E' => Vowel::E, b'i' | b'I' => Vowel::I,
-            b'o' | b'O' => Vowel::O, b'u' | b'U' => Vowel::U,
-            _ => return Err(SyllableParseError::NoVowel(idx))
-        };
-        let mut nasal = false;
-        if chars.as_slice().starts_with(b"n") {
-            let next = chars.as_slice().iter().skip(1).next();
-            if !next.is_some_and(|c| matches!(c, b'a'|b'e'|b'i'|b'o'|b'u')) {
-                chars.next();
-                nasal = true;
-            }
-        }
         *string = chars.as_slice();
-        return Ok(Syllable { consonant, vowel, nasal, is_space: false })
-    }
-
-    pub const fn encode(&self) -> u8 {
-        if self.is_space { return 0xFF };
-        let cons = if let Some(c) = self.consonant {c as u8} else {0};
-        cons << 4 | (self.vowel as u8) << 1 | self.nasal as u8
-    }
-    pub const fn decode(byte: u8) -> Result<Self, SyllableDecodeError> {
-        if byte == 0xFF { return Ok(Self::SPACE) }
-        use {Consonant::*, Vowel::*};
-        let consonant = match (byte & 0b11110000) >> 4 {
-            0 => None,
-            1 => Some(T), 2 => Some(K), 3 => Some(P),
-            4 => Some(L), 5 => Some(W), 6 => Some(S),
-            7 => Some(J), 8 => Some(N), 9 => Some(M),
-            n => return Err(SyllableDecodeError::InvalidConsonant(n))
+        if kind == SoundSegmentKind::Space {
+            *string = string.trim_ascii_start();
+        }
+        let mut length = match kind {
+            SoundSegmentKind::Space => settings.space_time,
+            SoundSegmentKind::Consonant(_) => settings.consonant_time,
+            SoundSegmentKind::Vowel(_) => settings.vowel_time
         };
-        let vowel = match (byte & 0b00001110) >> 1 {
-            0 => A, 1 => E, 2 => I, 3 => O, 4 => U,
-            n => return Err(SyllableDecodeError::InvalidVowel(n))
-        };
-        let nasal = byte & 0b00000001 != 0;
-        return Ok(Self { consonant, vowel, nasal, is_space: false })
+        let mut frequency = settings.base_frequency;
+        'b: { if chars.next().is_some_and(|c| *c == b'<') {
+            let slice = chars.as_slice();
+            let Some(settings_end) = chars.position(|c| *c == b'>') else { break 'b; };
+            let settings_str = &slice[..settings_end];
+            let Some(space_idx) = settings_str.iter().position(|c| *c == b' ') else { break 'b; };
+            let mut len_str = settings_str;
+            let Some(mut freq_str) = len_str.split_off(space_idx..) else { break 'b; };
+            len_str = len_str.trim_ascii();
+            freq_str = freq_str.trim_ascii();
+            let Some(len) = str::from_utf8(len_str).ok().and_then(|v| v.parse::<f32>().ok()) else { break 'b; };
+            let Some(freq) = str::from_utf8(freq_str).ok().and_then(|v| v.parse::<f32>().ok()) else { break 'b; };
+            if !(length.is_finite() && frequency.is_finite()) { break 'b; }
+            length /= len; frequency *= freq;
+            settings.space_time /= len;
+            settings.consonant_time /= len;
+            settings.vowel_time /= len;
+            settings.base_frequency = frequency;
+            *string = chars.as_slice();
+        } }
+        Ok(SoundSegment { kind, length, frequency })
     }
 }
 
-pub fn parse_syllables<'str> (string: &'str [u8]) -> impl Iterator<Item = Option<Result<Syllable, SyllableParseError>>> + 'str {
+pub fn parse_segments<'settings, 'str: 'settings> (string: &'str [u8], mut settings: SynthSettings) -> impl Iterator<Item = Result<SoundSegment, SegmentParseError>> {
     let mut s = string.as_ref();
-    let initial_len = string.len();
+    let full_len = string.len();
     let mut done = false;
     core::iter::from_fn(move || {
         if done { return None; }
-        let Some(first) = s.first() else { done = true; return Some(None); };
-        if first.is_ascii_whitespace() {
-            s = s.trim_ascii_start();
-            return Some(None)
+        let mut res = SoundSegment::parse(&mut s, &mut settings);
+        if let Err(err) = &mut res {
+            done = true;
+            match err {
+                SegmentParseError::EmptyString(_) => return None,
+                SegmentParseError::Unmatched(idx, _) => *idx += full_len - s.len()
+            }
         }
-        let len = s.len();
-        let res = Syllable::parse(&mut s, initial_len - len);
-        if res.is_err() { done = true; }
-        Some(Some(res))
+        Some(res)
     })
+}
+
+#[test]
+fn test_parsing() {
+    let settings = SynthSettings::default();
+    let segs = parse_segments(b"kijetesantakalu?? li tawa sike??? monsuta....", settings);
+    for seg in segs {
+        seg.unwrap();
+    }
+    let mut segs = parse_segments(b"# gaming !!", settings);
+    assert!(segs.next().is_some_and(|e| e.is_err()));
 }

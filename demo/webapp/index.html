@@ -61,6 +61,7 @@
                 margin: unset 2em;
                 padding: 0.6em;
                 resize: vertical;
+                height: 10em;
             }
             button {
                 width: max(30%, 200pt);
@@ -100,6 +101,7 @@
                 box-shadow: #00000040 5px 5px 10px inset;
                 padding: 0.3em;
                 border-radius: 0.3em;
+                font-family: monospace;
             }
         </style>
     </head>
@@ -108,9 +110,10 @@
             <textarea
                 id="input"
                 placeholder="o sitelen... (Write here...)"
-            >nasin pi ilo tawa sewi la, pipi suwi li ken ala tawa sewi. sijelo ona li suli mute, kin luka supa pi ona li lili mute. taso, pipi suwi li tawa sewi, tan ona li jo ala e pilin tan jan.</textarea>
+            >nasin pi &lt;0.8 0.8&gt;ilo tawa &lt;1.25 1.25&gt;sewi la, pipi suwi li ken ala tawa sewi. 
+                            .&lt;1.1 1.03&gt; this supports very very rough tokiponization . . . nja wuwojiti yukete . soweli Ajina</textarea>
             <div class="input">
-                <input type="number" min="0" max="10" value="1" id="pitch" />
+                <input type="number" min="110" max="22050" value="440" id="pitch" />
                 <label for="sample_rate">sijelo kalama <span class="english">(Pitch)</span></label>
             </div>
             <div class="input">
@@ -118,11 +121,11 @@
                 <label for="sample_rate">mute pi kipisi kalama <span class="english">(Sample Rate)</span></label>
             </div>
             <div class="input">
-                <input type="number" min="0" max="10" value="0.2" id="vowel_time" />
+                <input type="number" min="0" max="10" value="0.1" id="vowel_time" />
                 <label for="vowel_time">tenpo pi nimi uta <span class="english">(Vowel Time)</span></label>
             </div>
             <div class="input">
-                <input type="number" min="0" max="10" value="0.03" id="consonant_time" />
+                <input type="number" min="0" max="10" value="0.06" id="consonant_time" />
                 <label for="consonant_time">tenpo pi nimi kiwen <span class="english">(Consonant Time)</span></label>
             </div>
             <div class="input">
@@ -132,9 +135,7 @@
             <button id="button">o pali! <span class="english">(Generate!)</span></button>
             <div id="error" class="error" hidden>
                 <h3>pakala!</h3>
-                <p class="error_text">
-                    sitelen sina li lon ala e sitelen Lasina, anu ona li jo e nimi nasa.<br>
-                    <span class="english">(Your text is not valid <i>sitelen Lasina</i>, or has unsupported characters.)</span>
+                <p id="error_text" class="error_text">
                 </p>
             </div>
             <audio controls id="audio" hidden>
@@ -167,8 +168,10 @@
               if (!initialized) return;
               let data = generate(textNode.value, sampleRateNode.value, vowelTimeNode.value, consonantTimeNode.value, spaceTimeNode.value, pitchNode.value);
               if (typeof data === "string") {
+                console.error(data);
                 audioNode.hidden = true;
                 errorNode.hidden = false;
+                errorTextNode.textContent = "" + data;
                 return;
               }
               errorNode.hidden = true;
