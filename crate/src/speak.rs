@@ -167,7 +167,7 @@ static CONSONANT_SETTINGS: [SoundSettings; 9] = [
         .with_waves(300.0, 610.0, 2200.0, 0.8, 0.4, 0.2), // W
     SoundSettings::new()
         .consonant()
-        .with_waves(5000.0, 0.0, 0.0, 0.1, 0.0, 0.0)
+        .with_waves(0.0, 0.0, 5000.0, 0.0, 0.0, 0.1)
         .with_noise(0.6, 1.0, 0.5)
         .dampening(0.05), // S
     SoundSettings::new()
